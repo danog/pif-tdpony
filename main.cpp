@@ -6,9 +6,11 @@
 //
 #include <td/telegram/Client.h>
 #include <td/telegram/Log.h>
-#include <td/telegram/td_api.h>
-#include <td/telegram/td_api.hpp>
 
+#include <phpcpp.h>
+#include "exception.cpp"
+
+#include <exception>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -18,40 +20,13 @@
 #include <string>
 #include <vector>
 
-// Simple single-threaded example of TDLib usage.
-// Real world programs should use separate thread for the user input.
-
-// overloaded
-namespace detail {
-template <class... Fs>
-struct overload;
-
-template <class F>
-struct overload<F> : public F {
-  explicit overload(F f) : F(f) {
-  }
-};
-template <class F, class... Fs>
-struct overload<F, Fs...>
-    : public overload<F>
-    , overload<Fs...> {
-  overload(F f, Fs... fs) : overload<F>(f), overload<Fs...>(fs...) {
-  }
-  using overload<F>::operator();
-  using overload<Fs...>::operator();
-};
-}  // namespace detail
-
-template <class... F>
-auto overloaded(F... f) {
-  return detail::overload<F...>(f...);
-}
-
-namespace td_api = td::td_api;
-
-class TdExample {
+class X {
  public:
-  TdExample() {
+  void __construct(Php::Parameters &params) {
+    if (params[0]) {
+       if (!params[0].isArray()) {
+         throw new Exception("Invalid setting array was provided");
+       }
     td::Log::set_verbosity_level(1);
     client_ = std::make_unique<td::Client>();
   }
@@ -88,7 +63,7 @@ class TdExample {
           }
         } else if (action == "l") {
           std::cerr << "Logging out..." << std::endl;
-          send_query(td_api::make_object<td_api::logOut>(), {});
+          send_query(td::api::make_object<td::api::logOut>(), {});
         } else if (action == "m") {
           std::int64_t chat_id;
           ss >> chat_id;
@@ -97,21 +72,21 @@ class TdExample {
           std::getline(ss, text);
 
           std::cerr << "Sending message to chat " << chat_id << "..." << std::endl;
-          auto send_message = td_api::make_object<td_api::sendMessage>();
+          auto send_message = td::api::make_object<td::api::sendMessage>();
           send_message->chat_id_ = chat_id;
-          auto message_content = td_api::make_object<td_api::inputMessageText>();
+          auto message_content = td::api::make_object<td::api::inputMessageText>();
           message_content->text_ = std::move(text);
           send_message->input_message_content_ = std::move(message_content);
 
           send_query(std::move(send_message), {});
         } else if (action == "c") {
           std::cerr << "Loading chat list..." << std::endl;
-          send_query(td_api::make_object<td_api::getChats>(std::numeric_limits<std::int64_t>::max(), 0, 20),
+          send_query(td::api::make_object<td::api::getChats>(std::numeric_limits<std::int64_t>::max(), 0, 20),
                      [this](Object object) {
-                       if (object->get_id() == td_api::error::ID) {
+                       if (object->get_id() == td::api::error::ID) {
                          return;
                        }
-                       auto chats = td::move_tl_object_as<td_api::chats>(object);
+                       auto chats = td::move_tl_object_as<td::api::chats>(object);
                        for (auto chat_id : chats->chat_ids_) {
                          std::cerr << "[id:" << chat_id << "] [title:" << chat_title_[chat_id] << "]" << std::endl;
                        }
@@ -122,10 +97,10 @@ class TdExample {
   }
 
  private:
-  using Object = td_api::object_ptr<td_api::Object>;
+  using Object = td::api::object_ptr<td::api::Object>;
   std::unique_ptr<td::Client> client_;
 
-  td_api::object_ptr<td_api::AuthorizationState> authorization_state_;
+  td::api::object_ptr<td::api::AuthorizationState> authorization_state_;
   bool are_authorized_{false};
   bool need_restart_{false};
   std::uint64_t current_query_id_{0};
@@ -133,16 +108,16 @@ class TdExample {
 
   std::map<std::uint64_t, std::function<void(Object)>> handlers_;
 
-  std::map<std::int32_t, td_api::object_ptr<td_api::user>> users_;
+  std::map<std::int32_t, td::api::object_ptr<td::api::user>> users_;
 
   std::map<std::int64_t, std::string> chat_title_;
 
   void restart() {
     client_.reset();
-    *this = TdExample();
+    *this = X();
   }
 
-  void send_query(td_api::object_ptr<td_api::Function> f, std::function<void(Object)> handler) {
+  void send_query(td::api::object_ptr<td::api::Function> f, std::function<void(Object)> handler) {
     auto query_id = next_query_id();
     if (handler) {
       handlers_.emplace(query_id, std::move(handler));
@@ -172,29 +147,29 @@ class TdExample {
     return it->second->first_name_ + " " + it->second->last_name_;
   }
 
-  void process_update(td_api::object_ptr<td_api::Object> update) {
-    td_api::downcast_call(
+  void process_update(td::api::object_ptr<td::api::Object> update) {
+    td::api::downcast_call(
         *update, overloaded(
-                     [this](td_api::updateAuthorizationState &update_authorization_state) {
+                     [this](td::api::updateAuthorizationState &update_authorization_state) {
                        authorization_state_ = std::move(update_authorization_state.authorization_state_);
                        on_authorization_state_update();
                      },
-                     [this](td_api::updateNewChat &update_new_chat) {
+                     [this](td::api::updateNewChat &update_new_chat) {
                        chat_title_[update_new_chat.chat_->id_] = update_new_chat.chat_->title_;
                      },
-                     [this](td_api::updateChatTitle &update_chat_title) {
+                     [this](td::api::updateChatTitle &update_chat_title) {
                        chat_title_[update_chat_title.chat_id_] = update_chat_title.title_;
                      },
-                     [this](td_api::updateUser &update_user) {
+                     [this](td::api::updateUser &update_user) {
                        auto user_id = update_user.user_->id_;
                        users_[user_id] = std::move(update_user.user_);
                      },
-                     [this](td_api::updateNewMessage &update_new_message) {
+                     [this](td::api::updateNewMessage &update_new_message) {
                        auto chat_id = update_new_message.message_->chat_id_;
                        auto sender_user_name = get_user_name(update_new_message.message_->sender_user_id_);
                        std::string text;
-                       if (update_new_message.message_->content_->get_id() == td_api::messageText::ID) {
-                         text = static_cast<td_api::messageText &>(*update_new_message.message_->content_).text_;
+                       if (update_new_message.message_->content_->get_id() == td::api::messageText::ID) {
+                         text = static_cast<td::api::messageText &>(*update_new_message.message_->content_).text_;
                        }
                        std::cerr << "Got message: [chat_id:" << chat_id << "] [from:" << sender_user_name << "] ["
                                  << text << "]" << std::endl;
@@ -212,24 +187,24 @@ class TdExample {
 
   void on_authorization_state_update() {
     authentication_query_id_++;
-    td_api::downcast_call(
+    td::api::downcast_call(
         *authorization_state_,
         overloaded(
-            [this](td_api::authorizationStateReady &) {
+            [this](td::api::authorizationStateReady &) {
               are_authorized_ = true;
               std::cerr << "Got authorization" << std::endl;
             },
-            [this](td_api::authorizationStateLoggingOut &) {
+            [this](td::api::authorizationStateLoggingOut &) {
               are_authorized_ = false;
               std::cerr << "Logging out" << std::endl;
             },
-            [this](td_api::authorizationStateClosing &) { std::cerr << "Closing" << std::endl; },
-            [this](td_api::authorizationStateClosed &) {
+            [this](td::api::authorizationStateClosing &) { std::cerr << "Closing" << std::endl; },
+            [this](td::api::authorizationStateClosed &) {
               are_authorized_ = false;
               need_restart_ = true;
               std::cerr << "Terminated" << std::endl;
             },
-            [this](td_api::authorizationStateWaitCode &wait_code) {
+            [this](td::api::authorizationStateWaitCode &wait_code) {
               std::string first_name;
               std::string last_name;
               if (!wait_code.is_registered_) {
@@ -241,37 +216,37 @@ class TdExample {
               std::cerr << "Enter authentication code: ";
               std::string code;
               std::cin >> code;
-              send_query(td_api::make_object<td_api::checkAuthenticationCode>(code, first_name, last_name),
+              send_query(td::api::make_object<td::api::checkAuthenticationCode>(code, first_name, last_name),
                          create_authentication_query_handler());
             },
-            [this](td_api::authorizationStateWaitPassword &) {
+            [this](td::api::authorizationStateWaitPassword &) {
               std::cerr << "Enter authentication password: ";
               std::string password;
               std::cin >> password;
-              send_query(td_api::make_object<td_api::checkAuthenticationPassword>(password),
+              send_query(td::api::make_object<td::api::checkAuthenticationPassword>(password),
                          create_authentication_query_handler());
             },
-            [this](td_api::authorizationStateWaitPhoneNumber &) {
+            [this](td::api::authorizationStateWaitPhoneNumber &) {
               std::cerr << "Enter phone number: ";
               std::string phone_number;
               std::cin >> phone_number;
-              send_query(td_api::make_object<td_api::setAuthenticationPhoneNumber>(
+              send_query(td::api::make_object<td::api::setAuthenticationPhoneNumber>(
                              phone_number, false /*allow_flash_calls*/, false /*is_current_phone_number*/),
                          create_authentication_query_handler());
             },
-            [this](td_api::authorizationStateWaitEncryptionKey &) {
+            [this](td::api::authorizationStateWaitEncryptionKey &) {
               std::cerr << "Enter encryption key or DESTROY: ";
               std::string key;
               std::getline(std::cin, key);
               if (key == "DESTROY") {
-                send_query(td_api::make_object<td_api::destroy>(), create_authentication_query_handler());
+                send_query(td::api::make_object<td::api::destroy>(), create_authentication_query_handler());
               } else {
-                send_query(td_api::make_object<td_api::checkDatabaseEncryptionKey>(std::move(key)),
+                send_query(td::api::make_object<td::api::checkDatabaseEncryptionKey>(std::move(key)),
                            create_authentication_query_handler());
               }
             },
-            [this](td_api::authorizationStateWaitTdlibParameters &) {
-              auto parameters = td_api::make_object<td_api::tdlibParameters>();
+            [this](td::api::authorizationStateWaitTdlibParameters &) {
+              auto parameters = td::api::make_object<td::api::tdlibParameters>();
               parameters->use_message_database_ = true;
               parameters->use_secret_chats_ = true;
               parameters->api_id_ = 94575;
@@ -281,14 +256,14 @@ class TdExample {
               parameters->system_version_ = "Unknown";
               parameters->application_version_ = "1.0";
               parameters->enable_storage_optimizer_ = true;
-              send_query(td_api::make_object<td_api::setTdlibParameters>(std::move(parameters)),
+              send_query(td::api::make_object<td::api::setTdlibParameters>(std::move(parameters)),
                          create_authentication_query_handler());
             }));
   }
 
   void check_authentication_error(Object object) {
-    if (object->get_id() == td_api::error::ID) {
-      auto error = td::move_tl_object_as<td_api::error>(object);
+    if (object->get_id() == td::api::error::ID) {
+      auto error = td::move_tl_object_as<td::api::error>(object);
       std::cerr << "Error: " << to_string(error);
       on_authorization_state_update();
     }
@@ -299,8 +274,45 @@ class TdExample {
   }
 };
 
-int main() {
-  TdExample example;
-  example.loop();
-}
 
+
+
+extern "C" {
+
+    /**
+         *  Function that is called by PHP right after the PHP process
+         *  has started, and that returns an address of an internal PHP
+         *  strucure with all the details and features of your extension
+         *
+         *  @return void*   a pointer to an address that is understood by PHP
+         */
+    PHPCPP_EXPORT void *get_module()
+    {
+        // static(!) Php::Extension object that should stay in memory
+        // for the entire duration of the process (that's why it's static)
+        static Php::Extension extension("pif-tdpony", "1.0");
+
+        // description of the class so that PHP knows which methods are accessible
+        Php::Class<X> x("X");
+
+        x.method<&X::__construct>("__construct", Php::Public | Php::Final);
+        x.method<&X::__wakeup>("__wakeup", Php::Public | Php::Final);
+        x.method<&X::__sleep>("__sleep", Php::Public | Php::Final);
+
+        x.property("settings", 0, Php::Public);
+
+        x.constant("PIF_TDPONY_VERSION", "1.0");
+
+        Php::Namespace danog("danog");
+        Php::Namespace MadelineProto("MadelineProto");
+
+        Php::Class<Exception> exception("Exception");
+
+        MadelineProto.add(std::move(exception));
+        MadelineProto.add(std::move(x));
+        danog.add(std::move(MadelineProto));
+        extension.add(std::move(danog));
+
+        return extension;
+    }
+}
