@@ -20,15 +20,20 @@
 #include <string>
 #include <vector>
 
-class X {
+class API : public Php::Base {
  public:
-  void __construct(Php::Parameters &params) {
-    if (params[0]) {
-       if (!params[0].isArray()) {
-         throw new Exception("Invalid setting array was provided");
-       }
-    td::Log::set_verbosity_level(1);
+  void __construct() {
+    initTdlib();
+  }
+  void __wakeup() {
+    initTdlib();
+  }
+
+  void initTdlib() {
     client_ = std::make_unique<td::Client>();
+  }
+  void deinitTdlib() {
+    
   }
 
   void loop() {
@@ -114,7 +119,7 @@ class X {
 
   void restart() {
     client_.reset();
-    *this = X();
+    *this = API();
   }
 
   void send_query(td::api::object_ptr<td::api::Function> f, std::function<void(Object)> handler) {
@@ -293,23 +298,25 @@ extern "C" {
         static Php::Extension extension("pif-tdpony", "1.0");
 
         // description of the class so that PHP knows which methods are accessible
-        Php::Class<X> x("X");
+        Php::Class<API> api("API");
 
-        x.method<&X::__construct>("__construct", Php::Public | Php::Final);
-        x.method<&X::__wakeup>("__wakeup", Php::Public | Php::Final);
-        x.method<&X::__sleep>("__sleep", Php::Public | Php::Final);
+        api.method<&API::__construct>("__construct", Php::Public | Php::Final);
+        api.method<&API::__wakeup>("__wakeup", Php::Public | Php::Final);
+        api.method<&API::__sleep>("__sleep", Php::Public | Php::Final);
 
-        x.property("settings", 0, Php::Public);
+        api.property("settings", 0, Php::Public);
 
-        x.constant("PIF_TDPONY_VERSION", "1.0");
+        api.constant("PIF_TDPONY_VERSION", "1.0");
 
         Php::Namespace danog("danog");
         Php::Namespace MadelineProto("MadelineProto");
+        Php::Namespace X("X");
 
         Php::Class<Exception> exception("Exception");
 
-        MadelineProto.add(std::move(exception));
-        MadelineProto.add(std::move(x));
+        X.add(std::move(exception));
+        X.add(std::move(api));
+        MadelineProto.add(std::move(X));
         danog.add(std::move(MadelineProto));
         extension.add(std::move(danog));
 
