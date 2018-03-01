@@ -5,6 +5,6 @@ project(TdExample VERSION 1.0 LANGUAGES CXX)
 
 add_subdirectory(td)
 
-add_executable(main main.cpp)
-target_link_libraries(main PRIVATE Td::TdStatic)
-set_property(TARGET main PROPERTY CXX_STANDARD 14)
+add_library(phptd SHARED main.cpp)
+target_link_libraries(phptd PRIVATE Td::TdJsonStatic phpcpp)
+set_property(TARGET phptd PROPERTY CXX_STANDARD 14)
