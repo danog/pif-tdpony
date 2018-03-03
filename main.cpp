@@ -4,8 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-#include <td/telegram/ClientJson.h>
-#include <tdutils/td/utils/Slice.h>
+#include <td/telegram/td_json_client.h>
 #include <td/telegram/Log.h>
 
 #include <phpcpp.h>
@@ -24,41 +23,44 @@ class API : public Php::Base {
   API() = default;
   virtual ~API() = default;
   
-  void __construct() {
+  void __construct(Php::Parameters &params) {
+    Php::Value self(this);
+    self["tdlibParameters"] = params[0];
     initTdlib();
   }
   void __wakeup() {
     initTdlib();
-    Php::Value self(this);
-    if (self["tdlibParameters"]) client_->send(toSlice(self["tdlibParameters"]));
   }
   void __destruct() {
     deinitTdlib();
   }
 
   void initTdlib() {
-    client_ = std::make_unique<td::ClientJson>();
+    client = td_json_client_create();
+    Php::Value self(this);
+    Php::Array init;
+    init["@type"] = "setTdlibParameters";
+    init["tdlibParameters"] = self["tdlibParameters"];
+    std::string initJson = Php::call("json_encode", init);
+
+    td_json_client_send(client, initJson.c_str());
   }
   void deinitTdlib() {
-    client_.reset();
+    td_json_client_destroy(client);
   }
+
   void send(Php::Parameters &params) {
     Php::Value value = params[0];
     if (value.get("@type") == "setTdlibParameters") {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    client_->send(toSlice(value));
+    std::string valueJson = Php::call("json_encode", value);
+    td_json_client_send(client, valueJson.c_str());
   }
   
   Php::Value receive(Php::Parameters &params) {
-    auto slice = client_->receive(params[0]);
-    if (slice.empty()) {
-      return nullptr;
-    }
-    Php::Value result = Php::call("json_decode", slice.c_str(), true);
-    Php::Value self(this);
-    return result;
+    return Php::call("json_decode", td_json_client_receive(client, params[0]), true);
   }
   
   Php::Value execute(Php::Parameters &params) {
@@ -67,30 +69,22 @@ class API : public Php::Base {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    auto slice = client_->execute(toSlice(value));
-    if (slice.empty()) {
-      return nullptr;
-    }
-    return Php::call("json_decode", slice.c_str(), true);
+    std::string valueJson = Php::call("json_encode", value);
+    return Php::call("json_decode", td_json_client_execute(client, valueJson.c_str()), true);
   }
   
   
 
  private:
-  std::unique_ptr<td::ClientJson> client_;
-  td::Slice toSlice(Php::Value value) {
-    std::string str = Php::call("json_encode", value);
-    return td::Slice(str);
-  }
-
+  void *client;
 };
 
 
-class Logging : public Php::Base
+class Logger : public Php::Base
 {
   public:
-  Logging() = default;
-  virtual ~Logging() = default;
+  Logger() = default;
+  virtual ~Logger() = default;
   
   static Php::Value set_file_path(Php::Parameters &params) {
     return td::Log::set_file_path(params[0]);
@@ -122,14 +116,14 @@ extern "C" {
         // description of the class so that PHP knows which methods are accessible
         Php::Class<API> api("API");
 
-        api.method<&API::__construct>("__construct", Php::Public | Php::Final, {});
+        api.method<&API::__construct>("__construct", Php::Public | Php::Final, {Php::ByVal("tdlibParameters", Php::Type::Array)});
         api.method<&API::__wakeup>("__wakeup", Php::Public | Php::Final, {});
         api.method<&API::__destruct>("__destruct", Php::Public | Php::Final, {});
         api.method<&API::send>("send", Php::Public | Php::Final);
-        api.method<&API::receive>("receive", Php::Public | Php::Final);
+        api.method<&API::receive>("receive", Php::Public | Php::Final, {Php::ByVal("timeout", Php::Type::Float)});
         api.method<&API::execute>("execute", Php::Public | Php::Final);
 
-        api.property("settings", 0, Php::Public);
+        api.property("tdlibParameters", nullptr, Php::Private);
 
         api.constant("PIF_TDPONY_VERSION", "1.0");
 
@@ -137,14 +131,14 @@ extern "C" {
         Php::Namespace MadelineProto("MadelineProto");
         Php::Namespace X("X");
 
-        Php::Class<Logging> logging("Logging");
+        Php::Class<Logger> logger("Logger");
 
-        logging.method<&Logging::set_file_path>("set_file_path", Php::Public, {Php::ByVal("file_path", Php::Type::String)});
-        logging.method<&Logging::set_max_file_size>("set_max_file_size", Php::Public, {Php::ByVal("set_max_file_size", Php::Type::Numeric)});
-        logging.method<&Logging::set_verbosity_level>("set_verbosity_level", Php::Public, {Php::ByVal("verbosity_level", Php::Type::Numeric)});
+        logger.method<&Logger::set_file_path>("set_file_path", Php::Public, {Php::ByVal("file_path", Php::Type::String)});
+        logger.method<&Logger::set_max_file_size>("set_max_file_size", Php::Public, {Php::ByVal("set_max_file_size", Php::Type::Numeric)});
+        logger.method<&Logger::set_verbosity_level>("set_verbosity_level", Php::Public, {Php::ByVal("verbosity_level", Php::Type::Numeric)});
 
         X.add(std::move(api));
-        X.add(std::move(logging));
+        X.add(std::move(logger));
         MadelineProto.add(std::move(X));
         danog.add(std::move(MadelineProto));
         extension.add(std::move(danog));
