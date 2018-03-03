@@ -41,9 +41,8 @@ class API : public Php::Base {
     Php::Array init;
     init["@type"] = "setTdlibParameters";
     init["tdlibParameters"] = self["tdlibParameters"];
-    std::string initJson = Php::call("json_encode", init);
 
-    td_json_client_send(client, initJson.c_str());
+    td_json_client_send(client, json_encode(init));
   }
   void deinitTdlib() {
     td_json_client_destroy(client);
@@ -55,12 +54,11 @@ class API : public Php::Base {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    std::string valueJson = Php::call("json_encode", value);
-    td_json_client_send(client, valueJson.c_str());
+    td_json_client_send(client, json_encode(value));
   }
   
   Php::Value receive(Php::Parameters &params) {
-    return Php::call("json_decode", td_json_client_receive(client, params[0]), true);
+    return json_decode(td_json_client_receive(client, params[0]));
   }
   
   Php::Value execute(Php::Parameters &params) {
@@ -69,14 +67,19 @@ class API : public Php::Base {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    std::string valueJson = Php::call("json_encode", value);
-    return Php::call("json_decode", td_json_client_execute(client, valueJson.c_str()), true);
+    return json_decode(td_json_client_execute(client, json_encode(value)));
   }
   
   
 
  private:
   void *client;
+  const char *json_encode(Php::Value value) {
+    return strdup(Php::call("json_encode", value));
+  }
+  Php::Value json_decode(std::string value) {
+    return Php::call("json_decode", value, true);
+  }
 };
 
 
