@@ -40,6 +40,7 @@ class API : public Php::Base {
     client_ = std::make_unique<td::ClientJson>();
   }
   void deinitTdlib() {
+    client_.reset();
   }
   void send(Php::Parameters &params) {
     Php::Value value = params[0];
