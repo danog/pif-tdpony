@@ -14,23 +14,14 @@ If not, see <http://www.gnu.org/licenses/>.
 
 #include <phpcpp.h>
 
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <limits>
-#include <map>
-#include <sstream>
-#include <string>
-#include <vector>
-
 class API : public Php::Base {
  public:
   API() = default;
   virtual ~API() = default;
-  
+
   void __construct(Php::Parameters &params) {
-    Php::Value self(this);
-    self["tdlibParameters"] = params[0];
+    init["@type"] = "setTdlibParameters";
+    init["parameters"] = params[0];
     initTdlib();
   }
   void __wakeup() {
@@ -42,13 +33,8 @@ class API : public Php::Base {
 
   void initTdlib() {
     client = td_json_client_create();
-    Php::Value self(this);
-    Php::Array init;
-    init["@type"] = "setTdlibParameters";
-    init["tdlibParameters"] = self["tdlibParameters"];
-    std::string initJson = Php::call("json_encode", init);
-
-    td_json_client_send(client, initJson.c_str());
+    const char *initJson = Php::call("json_encode", init);
+    td_json_client_send(client, initJson);
   }
   void deinitTdlib() {
     td_json_client_destroy(client);
@@ -60,28 +46,28 @@ class API : public Php::Base {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    std::string valueJson = Php::call("json_encode", value);
-    td_json_client_send(client, valueJson.c_str());
+    const char *valueJson = Php::call("json_encode", value);
+    td_json_client_send(client, valueJson);
   }
-  
+
   Php::Value receive(Php::Parameters &params) {
     return Php::call("json_decode", td_json_client_receive(client, params[0]), true);
   }
-  
+
   Php::Value execute(Php::Parameters &params) {
     Php::Value value = params[0];
     if (value.get("@type") == "setTdlibParameters") {
       Php::Value self(this);
       self["tdlibParameters"] = value;
     }
-    std::string valueJson = Php::call("json_encode", value);
-    return Php::call("json_decode", td_json_client_execute(client, valueJson.c_str()), true);
+    const char *valueJson = Php::call("json_encode", value);
+    return Php::call("json_decode", td_json_client_execute(client, valueJson), true);
   }
-  
-  
+
 
  private:
   void *client;
+  Php::Array init;
 };
 
 
@@ -90,7 +76,7 @@ class Logger : public Php::Base
   public:
   Logger() = default;
   virtual ~Logger() = default;
-  
+
   static Php::Value set_file_path(Php::Parameters &params) {
     return td::Log::set_file_path(params[0]);
   }
@@ -116,7 +102,7 @@ extern "C" {
     {
         // static(!) Php::Extension object that should stay in memory
         // for the entire duration of the process (that's why it's static)
-        static Php::Extension extension("pif-tdpony", "1.0");
+        static Php::Extension extension("pif-tdpony", "1.1");
 
         // description of the class so that PHP knows which methods are accessible
         Php::Class<API> api("API");
