@@ -14,14 +14,7 @@ If not, see <http://www.gnu.org/licenses/>.
 
 #include <phpcpp.h>
 
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <limits>
-#include <map>
-#include <sstream>
 #include <string>
-#include <vector>
 
 class API : public Php::Base {
  public:
@@ -30,7 +23,9 @@ class API : public Php::Base {
   
   void __construct(Php::Parameters &params) {
     Php::Value self(this);
-    self["tdlibParameters"] = params[0];
+    self["tdlibParameters"]["@type"] = "setTdlibParameters";
+    self["tdlibParameters"]["parameters"] = params[0];
+
     initTdlib();
   }
   void __wakeup() {
@@ -43,16 +38,11 @@ class API : public Php::Base {
   void initTdlib() {
     client = td_json_client_create();
     Php::Value self(this);
-    Php::Array init;
-    init["@type"] = "setTdlibParameters";
-    init["tdlibParameters"] = self["tdlibParameters"];
-
-    td_json_client_send(client, json_encode(init));
+    td_json_client_execute(client, json_encode(self["tdlibParameters"]));
   }
   void deinitTdlib() {
     td_json_client_destroy(client);
   }
-
   void send(Php::Parameters &params) {
     Php::Value value = params[0];
     if (value.get("@type") == "setTdlibParameters") {
