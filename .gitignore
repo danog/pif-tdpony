@@ -7,3 +7,8 @@ compile_commands.json
 *sqlite
 documents
 libpif.*
+build
+depend.*
+.ninja*
+*.swp
+examples/madelinex
